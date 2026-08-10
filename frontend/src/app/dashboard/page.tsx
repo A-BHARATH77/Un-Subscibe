@@ -628,6 +628,7 @@ function DashboardContent() {
           background-color: #8abce4;
           position: relative;
           overflow: hidden;
+          isolation: isolate;
         }
 
         /* Moving Clouds */
@@ -636,7 +637,7 @@ function DashboardContent() {
           inset: 0;
           overflow: hidden;
           pointer-events: none;
-          z-index: 0;
+          z-index: -1;
         }
         .css-cloud {
           position: absolute;
@@ -660,11 +661,11 @@ function DashboardContent() {
           top: -50%; right: 15%;
         }
 
-        .cloud-1 { width: 400px; height: 120px; top: 15%; left: -400px; opacity: 0.8; animation: floatCloud 50s linear infinite; }
-        .cloud-2 { width: 550px; height: 160px; top: 45%; left: -600px; opacity: 0.6; animation: floatCloud 75s linear infinite 15s; }
-        .cloud-3 { width: 350px; height: 100px; top: 75%; left: -400px; opacity: 0.7; animation: floatCloud 40s linear infinite 5s; }
-        .cloud-4 { width: 600px; height: 180px; top: 5%; left: -600px; opacity: 0.45; animation: floatCloud 90s linear infinite 30s; }
-        .cloud-5 { width: 450px; height: 140px; top: 60%; left: -500px; opacity: 0.65; animation: floatCloud 65s linear infinite 25s; }
+        .cloud-1 { width: 130px; height: 39px; top: 2%; left: -200px; opacity: 0.8; animation: floatCloud 80s linear infinite; }
+        .cloud-2 { width: 180px; height: 52px; top: 12%; left: -300px; opacity: 0.6; animation: floatCloud 120s linear infinite 15s; }
+        .cloud-3 { width: 115px; height: 32px; top: 8%; left: -200px; opacity: 0.7; animation: floatCloud 65s linear infinite 5s; }
+        .cloud-4 { width: 195px; height: 58px; top: -3%; left: -300px; opacity: 0.45; animation: floatCloud 140s linear infinite 30s; }
+        .cloud-5 { width: 145px; height: 45px; top: 15%; left: -250px; opacity: 0.65; animation: floatCloud 100s linear infinite 25s; }
 
         @keyframes floatCloud {
           0% { transform: translateX(0) scale(1); }
@@ -1766,7 +1767,7 @@ function DashboardContent() {
                 <div style={{ position: 'relative', zIndex: 2, padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', width: '100%' }}>
                   <div>
                     <div style={{ fontSize: '1.4rem', fontWeight: 600, color: '#fff', textShadow: '0 2px 12px rgba(0,0,0,0.3)' }}>Trevor</div>
-                    <div style={{ fontSize: '0.9rem', color: '#fff', opacity: 0.9, fontWeight: 500, marginTop: '4px', textShadow: '0 2px 12px rgba(0,0,0,0.3)' }}>Designer</div>
+                    <div style={{ fontSize: '0.9rem', color: '#fff', opacity: 0.9, fontWeight: 500, marginTop: '4px', textShadow: '0 2px 12px rgba(0,0,0,0.3)' }}>Financial Analyst</div>
                   </div>
                 </div>
               </div>
