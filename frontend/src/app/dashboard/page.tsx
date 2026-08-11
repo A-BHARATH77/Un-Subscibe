@@ -17,9 +17,23 @@ interface UserInfo {
 }
 
 interface LogRow {
+  id?: number;
   organization_name: string;
+  sender_email?: string;
   result: string;
   created_at: string;
+}
+
+interface InboxEmail {
+  id: string;
+  from: string;
+  sender_name: string;
+  initials: string;
+  subject: string;
+  date: string;
+  date_formatted: string;
+  snippet: string;
+  internal_date: number;
 }
 
 function fmtDate(iso: string) {
@@ -53,6 +67,28 @@ function DashboardContent() {
   const [logsError, setLogsError] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [inboxEmails, setInboxEmails] = useState<InboxEmail[]>([]);
+  const [unsubDialogOpen, setUnsubDialogOpen] = useState(false);
+  const [unsubTargetMail, setUnsubTargetMail] = useState<InboxEmail | null>(null);
+  const [isUnsubscribingSingle, setIsUnsubscribingSingle] = useState(false);
+  const [isUnsubscribingAll, setIsUnsubscribingAll] = useState(false);
+  const [unsubAllDialogOpen, setUnsubAllDialogOpen] = useState(false);
+  const [unsubAllLimit, setUnsubAllLimit] = useState(15);
+  const [unsubAllDeselected, setUnsubAllDeselected] = useState<string[]>([]);
+  const [unsubscribingId, setUnsubscribingId] = useState<string | null>(null);
+  const [unsubToast, setUnsubToast] = useState<{ status: string; sender: string } | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [unsubAllProgress, setUnsubAllProgress] = useState<{
+    phase: 'idle' | 'running' | 'done';
+    current: number;
+    total: number;
+    currentSender: string;
+    results: { sender: string; status: string; msg_id: string }[];
+    summary: { success: number; skipped: number; not_found: number; errors: number } | null;
+  }>({
+    phase: 'idle', current: 0, total: 0, currentSender: '', results: [], summary: null
+  });
+  const [inboxLoading, setInboxLoading] = useState(true);
   const [chartFilter, setChartFilter] = useState<'hourly'|'day'|'week'|'month'>('day');
   const [hoveredPoint, setHoveredPoint] = useState<{x: number, y: number, display: string, count: number} | null>(null);
   const [hoveredBar, setHoveredBar] = useState<{result: string, count: number} | null>(null);
@@ -153,6 +189,86 @@ function DashboardContent() {
     await new Promise(res => setTimeout(res, 1200));
     setChatMsgs(prev => [...prev, logToUserReply(log)]);
   }
+
+  const handleUnsubscribeSingle = async () => {
+    if (!unsubTargetMail) return;
+    const mail = unsubTargetMail;
+    setIsUnsubscribingSingle(true);
+    setUnsubDialogOpen(false);
+    setUnsubTargetMail(null);
+    setUnsubscribingId(mail.id);
+    try {
+      // Call the user-specific unsubscribe endpoint (uses session credentials,
+      // NOT the admin token — existing admin pipeline is completely untouched)
+      const res = await fetch(`/api/user/unsubscribe/${mail.id}`, { method: 'POST' });
+      const data = await res.json();
+      const status = data.status || (res.ok ? 'success' : 'error');
+      // Remove the email from the inbox list and decrement unread count
+      setInboxEmails(prev => prev.filter(m => m.id !== mail.id));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+      // Show result toast
+      setUnsubToast({ status, sender: mail.sender_name || mail.from });
+      setTimeout(() => setUnsubToast(null), 4000);
+      setRefreshTrigger(prev => prev + 1); // Trigger a full fetch of logs/stats
+    } catch (e) {
+      console.error('[UserUnsub]', e);
+      setUnsubToast({ status: 'error', sender: mail.sender_name || mail.from });
+      setTimeout(() => setUnsubToast(null), 4000);
+    } finally {
+      setIsUnsubscribingSingle(false);
+      setUnsubscribingId(null);
+    }
+  };
+
+  const handleUnsubscribeAll = (limitedIds: string[]) => {
+    if (limitedIds.length === 0) return;
+    const total = limitedIds.length;
+    setIsUnsubscribingAll(true);
+    setUnsubAllDialogOpen(true); // keep dialog open to show progress
+    setUnsubAllProgress({ phase: 'running', current: 0, total, currentSender: '', results: [], summary: null });
+
+    // Call the user-specific batch unsubscribe endpoint (uses session credentials,
+    // NOT the admin token — existing admin pipeline is completely untouched)
+    const es = new EventSource(`/api/user/unsubscribe/all?ids=${limitedIds.join(',')}`);
+    es.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'processing') {
+        setUnsubAllProgress(prev => ({
+          ...prev,
+          current: data.index + 1,
+          currentSender: data.sender,
+        }));
+      } else if (data.type === 'result') {
+        // Remove from inbox list and decrement count
+        setInboxEmails(prev => prev.filter(m => m.id !== data.msg_id));
+        setUnreadCount(prev => Math.max(0, prev - 1));
+        setUnsubAllProgress(prev => ({
+          ...prev,
+          results: [...prev.results, { sender: data.sender, status: data.status, msg_id: data.msg_id }],
+        }));
+      } else if (data.type === 'done') {
+        es.close();
+        setIsUnsubscribingAll(false);
+        setRefreshTrigger(prev => prev + 1); // Trigger a full fetch of logs/stats
+        setUnsubAllProgress(prev => ({
+          ...prev,
+          phase: 'done',
+          summary: { success: data.success, skipped: data.skipped, not_found: data.not_found, errors: data.errors },
+        }));
+      } else if (data.type === 'error') {
+        es.close();
+        setIsUnsubscribingAll(false);
+        setUnsubAllProgress({ phase: 'idle', current: 0, total: 0, currentSender: '', results: [], summary: null });
+        setUnsubAllDialogOpen(false);
+      }
+    };
+    es.onerror = () => {
+      es.close();
+      setIsUnsubscribingAll(false);
+      setUnsubAllProgress({ phase: 'idle', current: 0, total: 0, currentSender: '', results: [], summary: null });
+      setUnsubAllDialogOpen(false);
+    };
+  };
 
   const activeTheme = {
     bg1: '#e3f1fb', bg2: '#8abce4', bg3: '#7eb3df',
@@ -258,16 +374,29 @@ function DashboardContent() {
       } catch (e) {}
     };
 
+    const fetchInbox = async () => {
+      try {
+        const r = await fetch(`/api/user/inbox?limit=30`);
+        const data = await r.json();
+        if (data && Array.isArray(data.emails)) {
+          setInboxEmails(data.emails);
+        }
+      } catch (e) {}
+      finally { setInboxLoading(false); }
+    };
+
     fetchLogs(true);
     fetchUnread();
+    fetchInbox();
     const interval = setInterval(() => {
       fetchInfo();
       fetchLogs(false);
       fetchUnread();
+      fetchInbox();
     }, 60_000);
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refreshTrigger]);
 
   // Scroll to bottom whenever chat messages or typing state changes
   useEffect(() => {
@@ -628,6 +757,7 @@ function DashboardContent() {
           background-color: #8abce4;
           position: relative;
           overflow: hidden;
+          isolation: isolate;
         }
 
         /* Moving Clouds */
@@ -636,7 +766,7 @@ function DashboardContent() {
           inset: 0;
           overflow: hidden;
           pointer-events: none;
-          z-index: 0;
+          z-index: -1;
         }
         .css-cloud {
           position: absolute;
@@ -660,11 +790,11 @@ function DashboardContent() {
           top: -50%; right: 15%;
         }
 
-        .cloud-1 { width: 400px; height: 120px; top: 15%; left: -400px; opacity: 0.8; animation: floatCloud 50s linear infinite; }
-        .cloud-2 { width: 550px; height: 160px; top: 45%; left: -600px; opacity: 0.6; animation: floatCloud 75s linear infinite 15s; }
-        .cloud-3 { width: 350px; height: 100px; top: 75%; left: -400px; opacity: 0.7; animation: floatCloud 40s linear infinite 5s; }
-        .cloud-4 { width: 600px; height: 180px; top: 5%; left: -600px; opacity: 0.45; animation: floatCloud 90s linear infinite 30s; }
-        .cloud-5 { width: 450px; height: 140px; top: 60%; left: -500px; opacity: 0.65; animation: floatCloud 65s linear infinite 25s; }
+        .cloud-1 { width: 130px; height: 39px; top: 2%; left: -200px; opacity: 0.8; animation: floatCloud 80s linear infinite; }
+        .cloud-2 { width: 180px; height: 52px; top: 12%; left: -300px; opacity: 0.6; animation: floatCloud 120s linear infinite 15s; }
+        .cloud-3 { width: 115px; height: 32px; top: 8%; left: -200px; opacity: 0.7; animation: floatCloud 65s linear infinite 5s; }
+        .cloud-4 { width: 195px; height: 58px; top: -3%; left: -300px; opacity: 0.45; animation: floatCloud 140s linear infinite 30s; }
+        .cloud-5 { width: 145px; height: 45px; top: 15%; left: -250px; opacity: 0.65; animation: floatCloud 100s linear infinite 25s; }
 
         @keyframes floatCloud {
           0% { transform: translateX(0) scale(1); }
@@ -836,6 +966,8 @@ function DashboardContent() {
         
         .bento-mails { grid-column: 1 / span 2; order: 7; }
         .bento-breakdown { grid-column: 4 / span 1; order: 8; }
+        .bento-inbox { grid-column: 1 / -1; order: 9; }
+        .bento-history { grid-column: 1 / -1; order: 10; }
 
         /* ── Glassmorphism Card base ── */
         .db-card {
@@ -1423,6 +1555,10 @@ function DashboardContent() {
           margin-right: 6px;
         }
         @keyframes dbSpin { to { transform: rotate(360deg); } }
+        @keyframes slideUpFade {
+          0%   { opacity: 0; transform: translateX(-50%) translateY(16px) scale(0.96); }
+          100% { opacity: 1; transform: translateX(-50%) translateY(0)    scale(1); }
+        }
         
         /* ── Settings Button & Overlay ── */
         .db-settings-btn {
@@ -1556,6 +1692,234 @@ function DashboardContent() {
 
         .db-mobile-y-axis { display: none; }
 
+        /* ── Inbox Mail List ── */
+        .db-inbox-card {
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        .db-inbox-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 20px 24px 16px;
+          border-bottom: 1px solid rgba(0,0,0,0.05);
+          flex-shrink: 0;
+        }
+        .db-inbox-title {
+          font-size: 1.1rem;
+          font-weight: 500;
+          color: #1a1a1a;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .db-inbox-badge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--primary);
+          color: #fff;
+          font-size: 0.68rem;
+          font-weight: 800;
+          border-radius: 99px;
+          padding: 2px 8px;
+          min-width: 24px;
+        }
+        .db-inbox-list {
+          display: flex;
+          flex-direction: column;
+          overflow-y: auto;
+          max-height: 480px;
+          scrollbar-width: thin;
+          scrollbar-color: rgba(0,0,0,0.1) transparent;
+        }
+        .db-inbox-list::-webkit-scrollbar { width: 4px; }
+        .db-inbox-list::-webkit-scrollbar-track { background: transparent; }
+        .db-inbox-list::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 99px; }
+        
+        .db-slider-container {
+          position: relative;
+          width: 100%;
+          padding: 20px 10px 10px;
+        }
+        .db-slider {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 100%;
+          height: 6px;
+          border-radius: 4px;
+          background: rgba(0,0,0,0.1);
+          outline: none;
+        }
+        .db-slider::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          background: #ef4444;
+          cursor: pointer;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+          border: 3px solid #fff;
+          transition: transform 0.1s;
+        }
+        .db-slider::-webkit-slider-thumb:hover {
+          transform: scale(1.1);
+        }
+        .db-slider-labels {
+          display: flex;
+          justify-content: space-between;
+          margin-top: 16px;
+          padding: 0 2px;
+          font-size: 0.8rem;
+          color: #666;
+          font-weight: 600;
+        }
+
+        .db-inbox-item {
+          display: grid;
+          grid-template-columns: 44px 1fr auto;
+          align-items: start;
+          gap: 12px;
+          padding: 14px 24px;
+          border-bottom: 1px solid rgba(0,0,0,0.04);
+          transition: background 0.15s;
+          cursor: default;
+          position: relative;
+        }
+        .db-inbox-item:last-child { border-bottom: none; }
+        .db-inbox-item:hover { background: rgba(67,143,203,0.04); }
+        .db-inbox-unsub-btn {
+          position: absolute;
+          bottom: 12px;
+          right: 24px;
+          background: #fff;
+          color: #ef4444;
+          border: 1px solid rgba(239, 68, 68, 0.3);
+          padding: 5px 12px;
+          border-radius: 8px;
+          font-size: 0.75rem;
+          font-weight: 700;
+          cursor: pointer;
+          opacity: 0;
+          transform: translateY(4px);
+          transition: all 0.2s ease;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+        .db-inbox-item:hover .db-inbox-unsub-btn {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        .db-inbox-unsub-btn:hover {
+          background: rgba(239, 68, 68, 0.05);
+          color: #dc2626;
+        }
+        .db-inbox-avatar {
+          width: 40px; height: 40px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+          display: flex; align-items: center; justify-content: center;
+          font-size: 0.78rem; font-weight: 800; color: #fff;
+          flex-shrink: 0;
+          box-shadow: 0 2px 8px rgba(67,143,203,0.25);
+        }
+        .db-inbox-content {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+          min-width: 0;
+        }
+        .db-inbox-sender {
+          font-size: 0.88rem;
+          font-weight: 700;
+          color: #1a1a1a;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .db-inbox-subject {
+          font-size: 0.83rem;
+          font-weight: 500;
+          color: #333;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .db-inbox-snippet {
+          font-size: 0.75rem;
+          color: #999;
+          font-weight: 400;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          margin-top: 1px;
+        }
+        .db-inbox-meta {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 5px;
+          flex-shrink: 0;
+        }
+        .db-inbox-date {
+          font-size: 0.72rem;
+          color: #aaa;
+          font-weight: 500;
+          white-space: nowrap;
+        }
+        .db-inbox-dot {
+          width: 8px; height: 8px;
+          border-radius: 50%;
+          background: var(--primary);
+          animation: pulseDot 2s ease-in-out infinite;
+        }
+        .db-inbox-empty {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          padding: 60px 24px;
+          color: #bbb;
+        }
+        .db-inbox-empty-icon {
+          width: 52px; height: 52px;
+          background: rgba(67,143,203,0.08);
+          border-radius: 16px;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .db-inbox-skeleton {
+          display: flex;
+          flex-direction: column;
+          gap: 1px;
+        }
+        .db-inbox-skeleton-item {
+          display: grid;
+          grid-template-columns: 44px 1fr auto;
+          align-items: center;
+          gap: 12px;
+          padding: 14px 24px;
+        }
+        .db-skeleton-circle {
+          width: 40px; height: 40px;
+          border-radius: 50%;
+          background: linear-gradient(90deg, rgba(0,0,0,0.06) 25%, rgba(0,0,0,0.04) 50%, rgba(0,0,0,0.06) 75%);
+          background-size: 200% 100%;
+          animation: shimmerPulse 1.4s ease-in-out infinite;
+        }
+        .db-skeleton-lines {
+          display: flex; flex-direction: column; gap: 6px;
+        }
+        .db-skeleton-line {
+          height: 10px;
+          border-radius: 99px;
+          background: linear-gradient(90deg, rgba(0,0,0,0.06) 25%, rgba(0,0,0,0.04) 50%, rgba(0,0,0,0.06) 75%);
+          background-size: 200% 100%;
+          animation: shimmerPulse 1.4s ease-in-out infinite;
+        }
+
         /* ── Mobile Responsive ── */
         @media (max-width: 1100px) {
           .db-bento-grid {
@@ -1563,7 +1927,7 @@ function DashboardContent() {
             gap: 20px;
           }
           .bento-profile, .bento-streak, .bento-unread, .bento-contribution { grid-column: span 1; order: initial; }
-          .bento-pie, .bento-calendar, .bento-mails, .bento-breakdown { grid-column: span 2; order: initial; }
+          .bento-pie, .bento-calendar, .bento-mails, .bento-breakdown, .bento-inbox, .bento-history { grid-column: span 2; order: initial; }
         }
 
         @media (max-width: 768px) {
@@ -1579,6 +1943,8 @@ function DashboardContent() {
           .bento-calendar { grid-column: span 1 !important; order: 4 !important; }
           .bento-mails { grid-column: span 1 !important; order: 5 !important; }
           .bento-breakdown { grid-column: span 1 !important; order: 6 !important; }
+          .bento-inbox { grid-column: span 1 !important; order: 7 !important; }
+          .bento-history { grid-column: span 1 !important; order: 8 !important; }
           
           .db-pie-wrapper {
             transform: scale(0.65) !important;
@@ -1766,7 +2132,7 @@ function DashboardContent() {
                 <div style={{ position: 'relative', zIndex: 2, padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', width: '100%' }}>
                   <div>
                     <div style={{ fontSize: '1.4rem', fontWeight: 600, color: '#fff', textShadow: '0 2px 12px rgba(0,0,0,0.3)' }}>Trevor</div>
-                    <div style={{ fontSize: '0.9rem', color: '#fff', opacity: 0.9, fontWeight: 500, marginTop: '4px', textShadow: '0 2px 12px rgba(0,0,0,0.3)' }}>Designer</div>
+                    <div style={{ fontSize: '0.9rem', color: '#fff', opacity: 0.9, fontWeight: 500, marginTop: '4px', textShadow: '0 2px 12px rgba(0,0,0,0.3)' }}>Financial Analyst</div>
                   </div>
                 </div>
               </div>
@@ -2297,6 +2663,200 @@ function DashboardContent() {
                     )}
                   </div>
                 </div>
+
+              {/* ── Unread Inbox Mails Section ── */}
+              <div className="db-card db-inbox-card bento-inbox">
+                <div className="db-inbox-header">
+                  <div className="db-inbox-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                      <polyline points="22,6 12,13 2,6"></polyline>
+                    </svg>
+                    Unread Inbox
+                    {inboxEmails.length > 0 && (
+                      <span className="db-inbox-badge">{inboxEmails.length}</span>
+                    )}
+                  </div>
+                  {inboxEmails.length > 0 ? (
+                    <button 
+                      onClick={() => {
+                        setUnsubAllDeselected([]);
+                        setUnsubAllDialogOpen(true);
+                      }}
+                      disabled={isUnsubscribingAll}
+                      style={{ padding: '6px 14px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, cursor: isUnsubscribingAll ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
+                      onMouseEnter={(e) => !isUnsubscribingAll && (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)')}
+                      onMouseLeave={(e) => !isUnsubscribingAll && (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)')}
+                    >
+                      {isUnsubscribingAll ? (
+                        <><span className="db-spin" style={{ width: '12px', height: '12px', marginRight: 0, borderWidth: '2px', borderTopColor: '#ef4444' }} /> Unsubscribing...</>
+                      ) : (
+                        'Unsubscribe All'
+                      )}
+                    </button>
+                  ) : (
+                    <div style={{ fontSize: '0.75rem', color: '#aaa', fontWeight: 500 }}>
+                      Latest unread · newest first
+                    </div>
+                  )}
+                </div>
+
+                {inboxLoading ? (
+                  <div className="db-inbox-skeleton">
+                    {[1,2,3,4,5].map(i => (
+                      <div key={i} className="db-inbox-skeleton-item">
+                        <div className="db-skeleton-circle" />
+                        <div className="db-skeleton-lines">
+                          <div className="db-skeleton-line" style={{ width: '40%' }} />
+                          <div className="db-skeleton-line" style={{ width: '70%' }} />
+                          <div className="db-skeleton-line" style={{ width: '55%' }} />
+                        </div>
+                        <div className="db-skeleton-line" style={{ width: '48px', height: '10px' }} />
+                      </div>
+                    ))}
+                  </div>
+                ) : inboxEmails.length === 0 ? (
+                  <div className="db-inbox-empty">
+                    <div className="db-inbox-empty-icon">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                        <polyline points="22,6 12,13 2,6"></polyline>
+                      </svg>
+                    </div>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#888' }}>All caught up!</div>
+                    <div style={{ fontSize: '0.78rem', color: '#bbb', textAlign: 'center', maxWidth: '260px', lineHeight: 1.5 }}>
+                      No unread emails in your inbox right now. Check back after new mail arrives.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="db-inbox-list" data-lenis-prevent="true">
+                    {inboxEmails.map((mail) => (
+                      <div key={mail.id} className="db-inbox-item">
+                        {/* Avatar */}
+                        <div className="db-inbox-avatar">
+                          {mail.initials}
+                        </div>
+
+                        {/* Content */}
+                        <div className="db-inbox-content">
+                          <div className="db-inbox-sender">{mail.sender_name || mail.from}</div>
+                          <div className="db-inbox-subject">{mail.subject}</div>
+                          {mail.snippet && (
+                            <div className="db-inbox-snippet">{mail.snippet}</div>
+                          )}
+                        </div>
+
+                        {/* Meta */}
+                        <div className="db-inbox-meta">
+                          <div className="db-inbox-date">{mail.date_formatted || mail.date}</div>
+                          <div className="db-inbox-dot" />
+                        </div>
+
+                        {/* Unsub Overlay Button — per-email, uses user's own credentials */}
+                        <button 
+                          className="db-inbox-unsub-btn"
+                          disabled={unsubscribingId === mail.id}
+                          onClick={(e) => { e.stopPropagation(); setUnsubTargetMail(mail); setUnsubDialogOpen(true); }}
+                          style={unsubscribingId === mail.id ? { opacity: 1, transform: 'translateY(0)', cursor: 'not-allowed', background: 'rgba(239,68,68,0.05)' } : {}}
+                        >
+                          {unsubscribingId === mail.id ? (
+                            <><span className="db-spin" style={{ width: '10px', height: '10px', marginRight: '4px', borderWidth: '2px', borderTopColor: '#ef4444', display: 'inline-block', verticalAlign: 'middle' }} />Processing...</>
+                          ) : 'Unsubscribe'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Unsubscribe History Section ── */}
+              <div className="db-card db-inbox-card bento-history">
+                <div className="db-inbox-header">
+                  <div className="db-inbox-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    Unsubscribe History
+                    {logs.length > 0 && (
+                      <span className="db-inbox-badge">{logs.length}</span>
+                    )}
+                  </div>
+                </div>
+
+                {logsLoading ? (
+                  <div className="db-inbox-skeleton">
+                    {[1,2,3,4].map(i => (
+                      <div key={i} className="db-inbox-skeleton-item">
+                        <div className="db-skeleton-circle" />
+                        <div className="db-skeleton-lines">
+                          <div className="db-skeleton-line" style={{ width: '40%' }} />
+                          <div className="db-skeleton-line" style={{ width: '70%' }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : logs.length === 0 ? (
+                  <div className="db-inbox-empty" style={{ minHeight: '180px' }}>
+                    <div className="db-inbox-empty-icon" style={{ opacity: 0.5 }}>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="1 4 1 10 7 10"></polyline>
+                        <polyline points="23 20 23 14 17 14"></polyline>
+                        <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path>
+                      </svg>
+                    </div>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#888' }}>No history yet</div>
+                    <div style={{ fontSize: '0.78rem', color: '#bbb' }}>Logs will appear here once you unsubscribe.</div>
+                  </div>
+                ) : (
+                  <div className="db-inbox-grid" data-lenis-prevent="true" style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', 
+                    gap: '12px', 
+                    maxHeight: '380px', 
+                    overflowY: 'auto', 
+                    padding: '8px' 
+                  }}>
+                    {logs.map((log, i) => (
+                      <div key={i} style={{ 
+                        background: 'rgba(0,0,0,0.02)', 
+                        border: '1px solid rgba(0,0,0,0.06)', 
+                        borderRadius: '12px', 
+                        padding: '12px 8px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        textAlign: 'center',
+                        gap: '8px',
+                        cursor: 'default',
+                        aspectRatio: '1 / 1',
+                        transition: 'background 0.15s'
+                      }}>
+                        <div style={{ 
+                          width: '100%', padding: '6px 0', borderRadius: '8px', 
+                          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                          background: log.result === 'success' ? 'rgba(16,185,129,0.1)' : log.result === 'skipped' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)', 
+                          color: log.result === 'success' ? '#10b981' : log.result === 'skipped' ? '#f59e0b' : '#ef4444'
+                        }}>
+                          <div style={{ fontSize: '1.1rem', flexShrink: 0 }}>
+                             {log.result === 'success' ? '✓' : log.result === 'skipped' ? '⏭' : log.result === 'not_found' ? '?' : '✕'}
+                          </div>
+                          <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'capitalize' }}>
+                             {log.result.replace('_', ' ')}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1a1a1a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
+                          {log.organization_name || 'Unknown'}
+                        </div>
+                        <div style={{ fontSize: '0.65rem', color: '#888', marginTop: 'auto', lineHeight: '1.2' }}>
+                          {new Date(log.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
             </div>
           </main>
 
@@ -2336,7 +2896,7 @@ function DashboardContent() {
                 </button>
               </div>
               
-              <div className="db-phone-body">
+              <div className="db-phone-body" data-lenis-prevent="true">
                 {!logsLoading && chatMsgs.length === 0 && !isTyping ? (
                   <div className="db-msg db-msg-in">Hey {displayName}! 👋 I'm watching your inbox. Forward any subscription email to the admin and I'll handle the unsubscribing for you!</div>
                 ) : (
@@ -2379,6 +2939,284 @@ function DashboardContent() {
             <p className="db-overlay-email">{info?.email || '—'}</p>
 
             <a href="/logout" className="db-overlay-signout" id="dashboard-signout">Sign Out</a>
+          </div>
+        </div>
+
+        {/* ── Unsubscribe Result Toast ── */}
+        {unsubToast && (
+          <div style={{
+            position: 'fixed',
+            bottom: '32px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 99999,
+            background: unsubToast.status === 'success' ? '#10b981' 
+                       : unsubToast.status === 'needs_review' ? '#f59e0b' 
+                       : '#ef4444',
+            color: '#fff',
+            padding: '12px 24px',
+            borderRadius: '12px',
+            fontSize: '0.85rem',
+            fontWeight: 600,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            animation: 'slideUpFade 0.3s cubic-bezier(0.34,1.56,0.64,1)',
+            maxWidth: '420px',
+            textAlign: 'center'
+          }}>
+            <span style={{ fontSize: '1.1rem' }}>
+              {unsubToast.status === 'success' ? '✅'
+               : unsubToast.status === 'needs_review' ? '🔍'
+               : '⚠️'}
+            </span>
+            <span>
+              {unsubToast.status === 'success'
+                ? `Unsubscribed from ${unsubToast.sender} successfully!`
+                : unsubToast.status === 'needs_review'
+                ? `${unsubToast.sender} needs manual review.`
+                : `Could not unsubscribe from ${unsubToast.sender}. Try manually.`}
+            </span>
+          </div>
+        )}
+
+        {/* ── Unsubscribe Dialog ── */}
+        <div className={`db-overlay ${unsubDialogOpen ? 'open' : ''}`} onClick={(e) => {
+          if (e.target === e.currentTarget) setUnsubDialogOpen(false);
+        }}>
+          <div className="db-overlay-card" style={{ maxWidth: '400px', padding: '32px' }}>
+            <button className="db-overlay-close" onClick={() => setUnsubDialogOpen(false)}>
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+            <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                <line x1="12" y1="9" x2="12" y2="13"></line>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+            </div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#111', margin: '0 0 8px 0', textAlign: 'center' }}>Confirm Unsubscribe</h2>
+            <p style={{ fontSize: '0.9rem', color: '#666', textAlign: 'center', marginBottom: '24px', lineHeight: 1.5 }}>
+              Are you sure you want to unsubscribe from <strong>{unsubTargetMail?.sender_name || unsubTargetMail?.from}</strong>?
+            </p>
+            <div style={{ display: 'flex', gap: '12px', width: '100%' }}>
+              <button 
+                onClick={() => setUnsubDialogOpen(false)}
+                style={{ flex: 1, padding: '12px', background: 'rgba(0,0,0,0.05)', color: '#555', borderRadius: '12px', fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'background 0.2s' }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.08)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.05)'}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleUnsubscribeSingle}
+                disabled={isUnsubscribingSingle}
+                style={{ flex: 1, padding: '12px', background: '#ef4444', color: '#fff', borderRadius: '12px', fontWeight: 600, border: 'none', cursor: isUnsubscribingSingle ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(239, 68, 68, 0.25)', transition: 'background 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                onMouseEnter={(e) => !isUnsubscribingSingle && (e.currentTarget.style.background = '#dc2626')}
+                onMouseLeave={(e) => !isUnsubscribingSingle && (e.currentTarget.style.background = '#ef4444')}
+              >
+                {isUnsubscribingSingle ? (
+                  <><span className="db-spin" style={{ width: '14px', height: '14px', marginRight: 0, borderWidth: '2px', borderTopColor: '#fff' }} /> Processing...</>
+                ) : (
+                  'Unsubscribe'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Unsubscribe All Dialog ── */}
+        <div className={`db-overlay ${unsubAllDialogOpen ? 'open' : ''}`} onClick={(e) => {
+          // Don't allow closing while processing
+          if (e.target === e.currentTarget && unsubAllProgress.phase === 'idle') setUnsubAllDialogOpen(false);
+        }}>
+          <div className="db-overlay-card" style={{ maxWidth: '700px', padding: '32px' }}>
+
+            {/* ── Phase: idle (select limit) ── */}
+            {unsubAllProgress.phase === 'idle' && (<>
+              <button className="db-overlay-close" onClick={() => setUnsubAllDialogOpen(false)}>
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+              <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(239,68,68,0.1)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+              </div>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#111', margin: '0 0 8px 0', textAlign: 'center' }}>Unsubscribe Limit</h2>
+              <p style={{ fontSize: '0.9rem', color: '#666', textAlign: 'center', marginBottom: '24px', lineHeight: 1.5 }}>
+                Select how many emails you want to unsubscribe from. We recommend starting small.
+              </p>
+
+              <div className="db-slider-container">
+                <input
+                  type="range"
+                  className="db-slider"
+                  min="5" max="25" step="5"
+                  value={unsubAllLimit}
+                  onChange={(e) => setUnsubAllLimit(Number(e.target.value))}
+                  style={{ background: `linear-gradient(to right, #ef4444 0%, #ef4444 ${(unsubAllLimit - 5) / 20 * 100}%, rgba(0,0,0,0.1) ${(unsubAllLimit - 5) / 20 * 100}%, rgba(0,0,0,0.1) 100%)` }}
+                />
+                <div className="db-slider-labels">
+                  <span style={{ color: unsubAllLimit >= 5  ? '#ef4444' : '#666' }}>5</span>
+                  <span style={{ color: unsubAllLimit >= 10 ? '#ef4444' : '#666' }}>10</span>
+                  <span style={{ color: unsubAllLimit >= 15 ? '#ef4444' : '#666' }}>15</span>
+                  <span style={{ color: unsubAllLimit >= 20 ? '#ef4444' : '#666' }}>20</span>
+                  <span style={{ color: unsubAllLimit >= 25 ? '#ef4444' : '#666' }}>25</span>
+                </div>
+              </div>
+
+              <div style={{ marginTop: '32px' }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#555', marginBottom: '16px', textAlign: 'center' }}>
+                  Selected Emails ({Math.min(unsubAllLimit, inboxEmails.length) - unsubAllDeselected.length})
+                </div>
+                <div style={{ display: 'grid', gridTemplateRows: 'repeat(5, auto)', gridAutoFlow: 'column', gap: '12px 16px', justifyContent: 'center' }}>
+                  {inboxEmails.slice(0, unsubAllLimit).map((mail) => {
+                    const isSelected = !unsubAllDeselected.includes(mail.id);
+                    return (
+                      <div key={mail.id} style={{ fontSize: '0.85rem', color: '#444', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: '8px', maxWidth: '160px' }}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {
+                            if (isSelected) {
+                              setUnsubAllDeselected(prev => [...prev, mail.id]);
+                            } else {
+                              setUnsubAllDeselected(prev => prev.filter(id => id !== mail.id));
+                            }
+                          }}
+                          style={{ accentColor: '#ef4444', cursor: 'pointer', flexShrink: 0 }}
+                        />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', color: isSelected ? '#444' : '#aaa', textDecoration: isSelected ? 'none' : 'line-through' }}>{mail.sender_name || mail.from}</span>
+                      </div>
+                    );
+                  })}
+                  {inboxEmails.length === 0 && (
+                    <div style={{ fontSize: '0.85rem', color: '#888', gridColumn: '1 / -1', textAlign: 'center' }}>No emails available</div>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', width: '100%', marginTop: '36px' }}>
+                <button
+                  onClick={() => setUnsubAllDialogOpen(false)}
+                  style={{ flex: 1, padding: '12px', background: 'rgba(0,0,0,0.05)', color: '#555', borderRadius: '12px', fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'background 0.2s' }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.08)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.05)'}
+                >Cancel</button>
+                <button
+                  disabled={inboxEmails.length === 0 || Math.min(unsubAllLimit, inboxEmails.length) - unsubAllDeselected.length === 0}
+                  onClick={() => {
+                    const limited = inboxEmails.slice(0, unsubAllLimit)
+                                      .map(m => m.id)
+                                      .filter(id => !unsubAllDeselected.includes(id));
+                    handleUnsubscribeAll(limited);
+                  }}
+                  style={{ flex: 1, padding: '12px', background: (inboxEmails.length === 0 || Math.min(unsubAllLimit, inboxEmails.length) - unsubAllDeselected.length === 0) ? '#ccc' : '#ef4444', color: '#fff', borderRadius: '12px', fontWeight: 600, border: 'none', cursor: (inboxEmails.length === 0 || Math.min(unsubAllLimit, inboxEmails.length) - unsubAllDeselected.length === 0) ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(239,68,68,0.25)', transition: 'background 0.2s' }}
+                  onMouseEnter={(e) => { if (inboxEmails.length > 0 && Math.min(unsubAllLimit, inboxEmails.length) - unsubAllDeselected.length > 0) e.currentTarget.style.background = '#dc2626'; }}
+                  onMouseLeave={(e) => { if (inboxEmails.length > 0 && Math.min(unsubAllLimit, inboxEmails.length) - unsubAllDeselected.length > 0) e.currentTarget.style.background = '#ef4444'; }}
+                >
+                  Proceed ({Math.min(unsubAllLimit, inboxEmails.length) - unsubAllDeselected.length})
+                </button>
+              </div>
+            </>)}
+
+            {/* ── Phase: running (live progress) ── */}
+            {unsubAllProgress.phase === 'running' && (
+              <div style={{ width: '100%' }}>
+                <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                  <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                    <span className="db-spin" style={{ width: '24px', height: '24px', borderColor: 'rgba(239,68,68,0.2)', borderTopColor: '#ef4444', borderWidth: '3px' }} />
+                  </div>
+                  <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#111', margin: '0 0 4px' }}>Unsubscribing…</h2>
+                  <p style={{ fontSize: '0.85rem', color: '#888', margin: 0 }}>
+                    Processing <strong style={{ color: '#ef4444' }}>{unsubAllProgress.currentSender || '...'}</strong>
+                    &nbsp;({unsubAllProgress.current} of {unsubAllProgress.total})
+                  </p>
+                </div>
+
+                {/* Progress bar */}
+                <div style={{ width: '100%', height: '6px', background: 'rgba(0,0,0,0.07)', borderRadius: '99px', overflow: 'hidden', marginBottom: '20px' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${unsubAllProgress.total > 0 ? (unsubAllProgress.current / unsubAllProgress.total) * 100 : 0}%`,
+                    background: 'linear-gradient(90deg, #ef4444, #f97316)',
+                    borderRadius: '99px',
+                    transition: 'width 0.4s ease'
+                  }} />
+                </div>
+
+                {/* Live results list */}
+                <div style={{ maxHeight: '220px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {unsubAllProgress.results.slice().reverse().map((r, i) => (
+                    <div key={r.msg_id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: 'rgba(0,0,0,0.03)', borderRadius: '8px', fontSize: '0.82rem' }}>
+                      <span style={{ fontSize: '1rem', flexShrink: 0 }}>
+                        {r.status === 'success' ? '✅' : r.status === 'skipped' ? '⏭️' : r.status === 'not_found' ? '🔍' : '⚠️'}
+                      </span>
+                      <span style={{ color: '#333', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.sender}</span>
+                      <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: '0.75rem', fontWeight: 600, color: r.status === 'success' ? '#10b981' : r.status === 'skipped' ? '#f59e0b' : '#ef4444', textTransform: 'capitalize' }}>
+                        {r.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Phase: done (summary) ── */}
+            {unsubAllProgress.phase === 'done' && unsubAllProgress.summary && (
+              <div style={{ width: '100%', textAlign: 'center' }}>
+                <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(16,185,129,0.1)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '1.6rem' }}>✅</div>
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#111', marginBottom: '6px' }}>All Done!</h2>
+                <p style={{ fontSize: '0.88rem', color: '#666', marginBottom: '24px' }}>Here's a summary of the batch unsubscription:</p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '28px' }}>
+                  {[{label: 'Success', val: unsubAllProgress.summary.success, color: '#10b981'},
+                    {label: 'Skipped', val: unsubAllProgress.summary.skipped, color: '#f59e0b'},
+                    {label: 'Not Found', val: unsubAllProgress.summary.not_found, color: '#6b7280'},
+                    {label: 'Errors', val: unsubAllProgress.summary.errors, color: '#ef4444'},
+                  ].map(s => (
+                    <div key={s.label} style={{ padding: '14px 8px', borderRadius: '12px', background: 'rgba(0,0,0,0.04)', border: `1px solid ${s.color}22` }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 800, color: s.color }}>{s.val}</div>
+                      <div style={{ fontSize: '0.72rem', color: '#888', fontWeight: 600, marginTop: '2px' }}>{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Scrollable individual results */}
+                <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '7px', marginBottom: '24px', textAlign: 'left' }}>
+                  {unsubAllProgress.results.map((r) => (
+                    <div key={r.msg_id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 12px', background: 'rgba(0,0,0,0.03)', borderRadius: '8px', fontSize: '0.82rem' }}>
+                      <span style={{ fontSize: '1rem', flexShrink: 0 }}>
+                        {r.status === 'success' ? '✅' : r.status === 'skipped' ? '⏭️' : r.status === 'not_found' ? '🔍' : '⚠️'}
+                      </span>
+                      <span style={{ color: '#333', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.sender}</span>
+                      <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: '0.75rem', fontWeight: 600, color: r.status === 'success' ? '#10b981' : r.status === 'skipped' ? '#f59e0b' : '#ef4444', textTransform: 'capitalize' }}>
+                        {r.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => {
+                    setUnsubAllDialogOpen(false);
+                    setUnsubAllProgress({ phase: 'idle', current: 0, total: 0, currentSender: '', results: [], summary: null });
+                  }}
+                  style={{ width: '100%', padding: '12px', background: '#10b981', color: '#fff', borderRadius: '12px', fontWeight: 600, border: 'none', cursor: 'pointer', fontSize: '0.95rem' }}
+                >
+                  Done
+                </button>
+              </div>
+            )}
+
           </div>
         </div>
 

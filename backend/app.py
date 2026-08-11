@@ -926,9 +926,9 @@ def api_user_logs():
             f"{SUPABASE_URL}/rest/v1/unsubscribe_logs",
             params={
                 "sender_email": f"eq.{email}",
-                "select": "organization_name,result,created_at",
+                "select": "*",
                 "order": "created_at.desc",
-                "limit": "100",
+                "limit": "500",
             },
             headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"},
             timeout=10,
@@ -1000,6 +1000,71 @@ def api_unread_ids():
         return jsonify({"ids": ids})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/user/inbox")
+def api_user_inbox():
+    """Return unread INBOX emails for the signed-in user, newest first.
+
+    Uses the session Gmail credentials (which are rebuilt from the per-user
+    refresh_token stored in Supabase when the user logs in).  Falls back to
+    returning an empty list if no credentials are available, so the dashboard
+    does not break for users who haven't yet OAuth-authenticated.
+
+    Query params:
+        email   – user email (used only for session resolution, not Gmail lookup)
+        limit   – max emails to return (default 20, max 50)
+    """
+    service = get_gmail_service()
+    if service is None:
+        # No Gmail credentials in session — return empty list gracefully
+        return jsonify({"emails": [], "error": "gmail_not_connected"})
+
+    try:
+        limit = min(int(request.args.get("limit", 20)), 50)
+        list_result = service.users().messages().list(
+            userId="me",
+            labelIds=["INBOX", "UNREAD"],
+            maxResults=limit,
+        ).execute()
+
+        messages = list_result.get("messages", [])
+        emails = []
+        for msg in messages:
+            try:
+                msg_data = service.users().messages().get(
+                    userId="me",
+                    id=msg["id"],
+                    format="metadata",
+                    metadataHeaders=["From", "Subject", "Date"],
+                ).execute()
+                headers = parse_headers(msg_data.get("payload", {}).get("headers", []))
+                snippet = msg_data.get("snippet", "")
+                internal_date = int(msg_data.get("internalDate", 0))  # ms since epoch
+                sender_name = get_sender_name(headers.get("from", ""))
+                emails.append({
+                    "id": msg["id"],
+                    "from": headers.get("from", ""),
+                    "sender_name": sender_name,
+                    "initials": get_sender_initials(sender_name),
+                    "subject": headers.get("subject", "(no subject)"),
+                    "date": headers.get("date", ""),
+                    "date_formatted": format_date(headers.get("date", "")),
+                    "snippet": snippet,
+                    "internal_date": internal_date,
+                })
+            except Exception as msg_exc:
+                logger.warning("[UserInbox] Could not fetch msg %s: %s", msg["id"], msg_exc)
+                continue
+
+        # Sort newest first by internalDate (Gmail already returns them newest-first,
+        # but an explicit sort guarantees stable ordering after partial failures)
+        emails.sort(key=lambda e: e["internal_date"], reverse=True)
+
+        return jsonify({"emails": emails})
+    except Exception as exc:
+        logger.warning("[UserInbox] Error fetching inbox: %s", exc)
+        return jsonify({"emails": [], "error": str(exc)})
 
 
 @app.route("/api/me")
@@ -1446,6 +1511,179 @@ def api_unsubscribe_all():
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+@app.route("/api/user/unsubscribe/<msg_id>", methods=["POST"])
+def api_user_unsubscribe_single(msg_id):
+    """Unsubscribe from a single email in the *user's own* inbox.
+
+    Uses the session Gmail credentials (rebuilt from the per-user refresh_token
+    stored in Supabase at login time) — completely independent of the admin token
+    and the background scheduler pipeline. The existing admin route
+    /api/unsubscribe/<msg_id> is left entirely untouched.
+
+    On success:
+      • Runs the unsubscribe engine against the email body / List-Unsubscribe header.
+      • Marks the email as read (removes the UNREAD label).
+      • Stores the result in Supabase unsubscribe_logs (same table, same schema).
+
+    Returns JSON with the engine result plus `marked_read` and `db_stored` flags.
+    """
+    service = get_gmail_service()
+    if service is None:
+        return jsonify({
+            "error": "Gmail not connected. Please sign in with Google to use this feature.",
+            "code": "gmail_not_connected"
+        }), 401
+
+    try:
+        html_body, list_unsub = _get_email_full(service, msg_id)
+        user_email = _get_user_email(service)
+
+        cb = set_frame if _stream_state["viewers"] > 0 else None
+        result = unsubscribe_engine.run(html_body, list_unsub, user_email=user_email, frame_callback=cb)
+
+        # Mark as read regardless of result (user explicitly requested this)
+        marked_read = _mark_as_read(service, msg_id)
+        result["marked_read"] = marked_read
+
+        # Store result in DB
+        db_stored = _store_result_in_db(service, msg_id, result)
+        result["db_stored"] = db_stored
+
+        logger.info(
+            "[UserUnsub] msg=%s user=%s status=%s marked_read=%s",
+            msg_id, user_email, result.get("status"), marked_read
+        )
+        return jsonify(result)
+
+    except Exception as exc:
+        logger.warning("[UserUnsub] Error processing msg %s: %s", msg_id, exc)
+        return jsonify({"status": "error", "error": str(exc)}), 500
+
+
+@app.route("/api/user/unsubscribe/all")
+def api_user_unsubscribe_all():
+    """SSE stream that unsubscribes from multiple emails in the *user's own* inbox.
+
+    Uses the session Gmail credentials — completely independent of the admin token
+    and the background scheduler pipeline. The existing admin route
+    /api/unsubscribe/all is left entirely untouched.
+
+    Query param: ids=id1,id2,id3,...  (comma-separated, order is preserved)
+
+    SSE event schema (same as the admin route):
+      { type: 'processing', index, total, msg_id, subject, sender }
+      { type: 'result',     index, total, msg_id, subject, sender, status, ... }
+      { type: 'done',       total, success, skipped, not_found, errors }
+    """
+    service = get_gmail_service()
+    if service is None:
+        def _auth_error():
+            yield "data: " + json.dumps({
+                "type": "error",
+                "code": "gmail_not_connected",
+                "error": "Gmail not connected. Please sign in with Google.",
+            }) + "\n\n"
+        return Response(
+            stream_with_context(_auth_error()),
+            mimetype="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    raw_ids = request.args.get("ids", "")
+    msg_ids = [i.strip() for i in raw_ids.split(",") if i.strip()]
+
+    if not msg_ids:
+        def _no_ids():
+            yield "data: " + json.dumps({"type": "error", "error": "No email IDs provided."}) + "\n\n"
+        return Response(
+            stream_with_context(_no_ids()),
+            mimetype="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    def generate():
+        total = len(msg_ids)
+        success_count = 0
+        skipped_count = 0
+        not_found_count = 0
+        error_count = 0
+        user_email = _get_user_email(service)
+
+        for idx, msg_id in enumerate(msg_ids):
+            subject = "(unknown)"
+            sender = "(unknown)"
+            try:
+                meta = service.users().messages().get(
+                    userId="me", id=msg_id, format="metadata",
+                    metadataHeaders=["Subject", "From", "List-Unsubscribe"]
+                ).execute()
+                for h in meta.get("payload", {}).get("headers", []):
+                    if h["name"].lower() == "subject":
+                        subject = h["value"]
+                    elif h["name"].lower() == "from":
+                        sender = get_sender_name(h["value"])
+            except Exception:
+                pass
+
+            yield "data: " + json.dumps({
+                "type": "processing",
+                "index": idx,
+                "total": total,
+                "msg_id": msg_id,
+                "subject": subject,
+                "sender": sender,
+            }) + "\n\n"
+
+            result = {"status": "error", "method": None, "reason": "Unknown", "url": None, "error": None}
+            try:
+                html_body, list_unsub = _get_email_full(service, msg_id)
+                cb = set_frame if _stream_state["viewers"] > 0 else None
+                result = unsubscribe_engine.run(html_body, list_unsub, user_email=user_email, frame_callback=cb)
+            except Exception as exc:
+                result = {
+                    "status": "error", "method": None,
+                    "reason": str(exc), "url": None, "error": str(exc)
+                }
+
+            s = result.get("status", "error")
+            if s == "success":      success_count += 1
+            elif s == "skipped":    skipped_count += 1
+            elif s == "not_found":  not_found_count += 1
+            else:                   error_count += 1
+
+            # Always mark as read (user explicitly requested) + store in DB
+            result["marked_read"] = _mark_as_read(service, msg_id)
+            result["db_stored"]   = _store_result_in_db(service, msg_id, result)
+
+            logger.info("[UserUnsubAll] %d/%d msg=%s user=%s status=%s",
+                        idx + 1, total, msg_id, user_email, s)
+
+            yield "data: " + json.dumps({
+                "type": "result",
+                "index": idx,
+                "total": total,
+                "msg_id": msg_id,
+                "subject": subject,
+                "sender": sender,
+                **result,
+            }) + "\n\n"
+
+        yield "data: " + json.dumps({
+            "type": "done",
+            "total": total,
+            "success": success_count,
+            "skipped": skipped_count,
+            "not_found": not_found_count,
+            "errors": error_count,
+        }) + "\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

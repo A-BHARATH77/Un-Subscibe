@@ -1,48 +1,32 @@
 // @ts-nocheck
 "use client";
-import { useState, useEffect, useRef } from "react";
-import gsap from "gsap";
+import { useState } from "react";
 
 export default function Hero() {
   const [copied, setCopied] = useState(false);
-  const cloudRef = useRef(null);
-
-  useEffect(() => {
-    // We wait for the component to mount, then start the animation.
-    // Using string values for vw ensures it works safely with Next.js SSR.
-    let ctx = gsap.context(() => {
-      gsap.fromTo(
-        cloudRef.current,
-        { x: "100vw" },
-        {
-          x: "-100vw",
-          ease: "none",
-          duration: 25,
-          repeat: -1,
-        }
-      );
-    });
-    return () => ctx.revert(); // Cleanup on unmount
-  }, []);
 
   return (
     <>
 <section className="section_hero" data-anim="hero" suppressHydrationWarning style={{ height: '100%', position: 'relative', overflow: 'hidden' }}>
-<div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 5, overflow: 'hidden' }}>
-  <img 
-    ref={cloudRef}
-    src="/clouds.png" 
-    alt="" 
+
+{/* Video Background */}
+<div style={{ position: 'absolute', inset: 0, zIndex: 1, overflow: 'hidden', pointerEvents: 'none' }}>
+  <video
+    src="/background.mp4"
+    autoPlay
+    loop
+    muted
+    playsInline
     style={{
       position: 'absolute',
-      top: 0,
-      left: 0,
-      height: '100%',
+      top: '50%',
+      left: '50%',
+      minWidth: '100%',
+      minHeight: '100%',
       width: 'auto',
-      minWidth: '100vw',
-      objectFit: 'cover',
-      opacity: 0.8,
-      display: 'block'
+      height: 'auto',
+      transform: 'translate(-50%, -50%)',
+      objectFit: 'cover'
     }}
   />
 </div>
@@ -197,7 +181,6 @@ export default function Hero() {
 </div>
 </div>
 </div>
-<img alt="" className="img is-hero" hero-bg="" loading="lazy" src="https://cdn.prod.website-files.com/6929c116366a14507fc8424d/6929d3408e9ff6a515b9eee8_ai-hero%20(1).avif" suppressHydrationWarning />
 <div className="_3d_spacer" suppressHydrationWarning></div>
 
 </section>
