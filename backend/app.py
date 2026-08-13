@@ -526,31 +526,13 @@ def oauth2callback():
         except Exception as exc:
             logger.warning("[Auth] Could not check user existence: %s", exc)
 
-        # Resolve name/password from the pending signup store (presignup flow),
-        # or fall back to the name passed via query param (legacy Google-only path).
-        pending_name = name
-        pending_password = None
-        if pending_token and pending_token in _pending_signups:
-            entry = _pending_signups.pop(pending_token)
-            pending_name = entry.get("name") or name
-            pending_password = entry.get("password")
-            logger.info("[Auth] Resolved pending signup entry for token=%s", pending_token[:8] + "...")
-
-        # Capture the per-user refresh token so password-login sessions can
-        # rebuild Gmail credentials without a new OAuth consent round-trip.
-        user_refresh_token = creds_dict.get("refresh_token")
-
         # Insert new user
         try:
             payload = {
                 "email": user_email,
-                "name": pending_name or None,
+                "name": name or None,
                 "role": "user",
             }
-            if pending_password:
-                payload["password"] = pending_password
-            if user_refresh_token:
-                payload["refresh_token"] = user_refresh_token
             resp = http_requests.post(
                 f"{SUPABASE_URL}/rest/v1/users",
                 json=payload,
@@ -606,27 +588,6 @@ def oauth2callback():
                 logger.info("[Auth] Admin token saved to token.json for scheduler.")
                 redirect_path = "/admin-dashboard"
             else:
-                # Regular users: credentials live in session only — never touch token.json.
-                # Always keep the per-user refresh_token in Supabase up-to-date so
-                # subsequent password logins can rebuild Gmail credentials.
-                new_rt = creds_dict.get("refresh_token")
-                if new_rt and SUPABASE_URL and SUPABASE_KEY:
-                    try:
-                        http_requests.patch(
-                            f"{SUPABASE_URL}/rest/v1/users",
-                            params={"email": f"eq.{user_email}"},
-                            json={"refresh_token": new_rt},
-                            headers={
-                                "apikey": SUPABASE_KEY,
-                                "Authorization": f"Bearer {SUPABASE_KEY}",
-                                "Content-Type": "application/json",
-                                "Prefer": "return=minimal",
-                            },
-                            timeout=8,
-                        )
-                        logger.info("[Auth] Refresh token updated in Supabase for: %s", user_email)
-                    except Exception as rt_exc:
-                        logger.warning("[Auth] Could not update refresh token: %s", rt_exc)
                 redirect_path = f"/dashboard?_e={user_email}"
             logger.info("[Auth] Sign-in OK — %s role=%s → %s", user_email, role, redirect_path)
             return redirect(f"{frontend_url}{redirect_path}")
@@ -713,7 +674,7 @@ def api_auth_login():
     try:
         resp = http_requests.get(
             f"{SUPABASE_URL}/rest/v1/users",
-            params={"email": f"eq.{email}", "select": "password,role,refresh_token"},
+            params={"email": f"eq.{email}", "select": "password,role"},
             headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"},
             timeout=8,
         )
@@ -729,32 +690,6 @@ def api_auth_login():
             session["user_email"] = email
             role = rows[0].get("role", "user")
 
-            # ── Rebuild Gmail credentials from the stored per-user refresh token ──
-            # This lets all Gmail endpoints work for password-login users without
-            # requiring a separate Google OAuth consent step each session.
-            stored_rt = rows[0].get("refresh_token")
-            if stored_rt:
-                try:
-                    with open(CREDENTIALS_FILE, "r") as _cf:
-                        _cinfo = json.load(_cf)
-                    # credentials.json may have "web" or "installed" as the top key
-                    _client = _cinfo.get("web") or _cinfo.get("installed") or {}
-                    creds = Credentials(
-                        token=None,
-                        refresh_token=stored_rt,
-                        token_uri="https://oauth2.googleapis.com/token",
-                        client_id=_client.get("client_id"),
-                        client_secret=_client.get("client_secret"),
-                        scopes=SCOPES,
-                    )
-                    creds.refresh(Request())   # obtain a fresh access token immediately
-                    session["credentials"] = credentials_to_dict(creds)
-                    logger.info("[Auth] Gmail credentials rebuilt from stored token for: %s", email)
-                except Exception as cred_exc:
-                    logger.warning("[Auth] Could not rebuild Gmail credentials for %s: %s", email, cred_exc)
-            else:
-                logger.info("[Auth] No stored refresh token for %s — Gmail features unavailable this session", email)
-
             logger.info("[Auth] Email/Password Sign-in OK — %s role=%s", email, role)
             return jsonify({"status": "ok", "email": email, "role": role})
             
@@ -764,40 +699,7 @@ def api_auth_login():
         return jsonify({"error": "Could not connect to database"}), 500
 
 
-@app.route("/api/auth/presignup", methods=["POST"])
-def api_auth_presignup():
-    """
-    Step 1 of the email+password signup flow.
-    Accepts { name, password }, validates them, checks the email doesn't already
-    exist (we can't check email yet — that comes from Google), stores the data
-    temporarily in _pending_signups, and returns a short-lived { pending_token }.
-    The frontend then redirects to /authorize?mode=signup&pending=<token> so that
-    Google OAuth runs next and supplies the user's email + refresh token.
-    """
-    data = request.get_json() or {}
-    name = data.get("name", "").strip()
-    password = data.get("password", "")
 
-    if not name:
-        return jsonify({"error": "Name is required"}), 400
-    if not password:
-        return jsonify({"error": "Password is required"}), 400
-
-    # Purge any expired pending entries (older than 10 minutes)
-    now = time.time()
-    expired_keys = [k for k, v in list(_pending_signups.items()) if now - v.get("created_at", 0) > 600]
-    for k in expired_keys:
-        _pending_signups.pop(k, None)
-
-    # Generate a one-time token and cache the signup data
-    pending_token = secrets.token_urlsafe(32)
-    _pending_signups[pending_token] = {
-        "name": name,
-        "password": password,
-        "created_at": now,
-    }
-    logger.info("[Auth] Pre-signup entry stored for name=%s", name)
-    return jsonify({"pending_token": pending_token})
 
 
 # ── Admin dashboard data endpoints ───────────────────────────────────────────

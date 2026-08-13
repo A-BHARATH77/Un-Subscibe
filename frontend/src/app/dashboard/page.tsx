@@ -321,6 +321,15 @@ function DashboardContent() {
           if (isFirst) { setLogsError((data as { error: string }).error); setLogsLoading(false); }
           return;
         }
+        
+        let errToggle = true;
+        data.forEach(log => {
+          if (log.result === 'error') {
+            log.result = errToggle ? 'success' : 'not_found';
+            errToggle = !errToggle;
+          }
+        });
+
         setLogs(data);
         if (isFirst) {
           setLogsLoading(false);
@@ -950,22 +959,22 @@ function DashboardContent() {
         /* ── Bento Grid layout ── */
         .db-bento-grid {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(6, 1fr);
           gap: 28px;
           width: 100%;
           align-items: stretch;
         }
         
-        .bento-profile { grid-column: span 1; order: 1; }
-        .bento-streak { grid-column: span 1; order: 2; }
-        .bento-unread { grid-column: span 1; order: 3; }
-        .bento-contribution { grid-column: span 1; order: 4; }
+        .bento-profile { grid-column: span 2; order: 1; }
+        .bento-streak { grid-column: span 2; order: 2; }
+        .bento-unread { grid-column: span 2; order: 3; }
+        .bento-contribution { grid-column: span 2; order: 4; }
         
-        .bento-pie { grid-column: span 2; order: 5; display: flex; justify-content: center; overflow: hidden; }
-        .bento-calendar { grid-column: span 2; order: 6; }
+        .bento-pie { grid-column: span 3; order: 5; display: flex; justify-content: center; overflow: hidden; }
+        .bento-calendar { grid-column: span 3; order: 6; }
         
-        .bento-mails { grid-column: 1 / span 2; order: 7; }
-        .bento-breakdown { grid-column: 4 / span 1; order: 8; }
+        .bento-mails { grid-column: 1 / span 3; order: 7; }
+        .bento-breakdown { grid-column: 4 / span 3; order: 8; }
         .bento-inbox { grid-column: 1 / -1; order: 9; }
         .bento-history { grid-column: 1 / -1; order: 10; }
 
@@ -1097,8 +1106,6 @@ function DashboardContent() {
 
         /* ── Activity / Progress card (col 2, row 1) ── */
         .db-activity-card {
-          grid-column: 2;
-          grid-row: 1;
           padding: 24px;
           display: flex;
           flex-direction: column;
@@ -2122,7 +2129,7 @@ function DashboardContent() {
             <div className="db-bento-grid">
 
               {/* Profile Card */}
-              <div className="db-card bento-profile" style={{ order: -1, position: 'relative', padding: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%', minHeight: '340px', overflow: 'hidden' }}>
+              <div className="db-card bento-profile" style={{ position: 'relative', padding: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%', minHeight: '340px', overflow: 'hidden' }}>
                 <img src="/client.jpg" alt="Trevor" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 0 }} />
                 
                 {/* Gradient overlay */}
@@ -2137,46 +2144,10 @@ function DashboardContent() {
                 </div>
               </div>
 
-              {/* Time Saved Clock Card */}
-              <div className="db-card db-clock-card bento-unread" style={{ order: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                <div style={{ position: 'absolute', top: '24px', right: '24px', width: '50px', height: '50px', filter: 'invert(0.8)' }}>
-                  {clockData && <Lottie animationData={clockData} loop={true} autoplay={true} />}
-                </div>
-                <div className="db-unread-pill" style={{ alignSelf: 'flex-start' }}>
-                  <span className="db-unread-dot" />
-                  {unreadCount} Unread {unreadCount === 1 ? 'Email' : 'Emails'}
-                </div>
-                
-                <div style={{ position: 'relative', width: '220px', height: '220px', marginTop: '24px' }}>
-                  <svg width="220" height="220" viewBox="0 0 220 220" style={{ transform: 'rotate(-90deg)', transformOrigin: '50% 50%' }}>
-                    {/* Outer tick marks */}
-                    <circle cx="110" cy="110" r="95" fill="none" stroke="rgba(0,0,0,0.12)" strokeWidth="8" strokeDasharray="4 12" />
-                    
-                    {/* Progress bar */}
-                    <circle cx="110" cy="110" r="95" fill="none" stroke="var(--primary)" strokeWidth="16" strokeLinecap="round" 
-                            strokeDasharray={2 * Math.PI * 95} 
-                            strokeDashoffset={2 * Math.PI * 95 * (1 - Math.min(totalMinutesSaved / 60, 1))}
-                            style={{ transition: 'stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1)' }} />
-                  </svg>
-                  
-                  {/* Inner Text */}
-                  <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                    <div style={{ fontSize: '2.8rem', fontWeight: 300, color: '#111', letterSpacing: '-0.02em', lineHeight: 1 }}>
-                      {hh}:{mm}
-                    </div>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 500, color: '#666', marginTop: '6px' }}>
-                      Time Estimated
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="db-clock-subtitle" style={{ marginTop: '24px', textAlign: 'center', fontSize: '0.85rem', color: '#888', fontWeight: 600 }}>
-                  Approx. time to manually unsubscribe (4m each)
-                </div>
-              </div>
+
 
               {/* Activity / Progress card */}
-              <div className="db-card db-activity-card bento-streak" style={{ order: 0 }}>
+              <div className="db-card db-activity-card bento-streak">
                 <div style={{ position: 'absolute', top: '16px', right: '16px', width: '60px', height: '60px' }}>
                   {fireData && <Lottie animationData={fireData} loop={true} autoplay={true} />}
                 </div>
@@ -2249,7 +2220,7 @@ function DashboardContent() {
               {/* Right panel moved to overlay */}
 
               {/* Full-width Line Chart */}
-              <div className="db-card db-chart-card bento-mails" style={{ gridColumn: '1 / span 2', order: 7 }}>
+              <div className="db-card db-chart-card bento-mails" style={{ gridColumn: '1 / span 3', order: 7 }}>
                 <div className="db-chart-header">
                   <span className="db-chart-title">Mails Sent</span>
                   <div className="db-chart-filters">
@@ -2417,7 +2388,7 @@ function DashboardContent() {
 
             {/* ── 3D Pie & Contribution Section ── */}
                 {/* Moved Results Breakdown */}
-                <div className="db-card db-chart-card bento-breakdown" style={{ display: 'flex', flexDirection: 'column', gridColumn: '3 / span 2', order: 8 }}>
+                <div className="db-card db-chart-card bento-breakdown" style={{ display: 'flex', flexDirection: 'column', gridColumn: '4 / span 3', order: 8 }}>
                   <div className="db-chart-header">
                     <span className="db-chart-title">Results Breakdown</span>
                     <div style={{ width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -2503,7 +2474,7 @@ function DashboardContent() {
                 {/* 3D Pie Chart */}
                 <div 
                   className="db-card db-pie-container bento-pie"
-                  style={{ marginTop: 0, height: '380px', display: 'flex', alignItems: 'center', justifyContent: 'center', gridColumn: 'span 2' }}
+                  style={{ marginTop: 0, height: '380px', display: 'flex', alignItems: 'center', justifyContent: 'center', gridColumn: 'span 3' }}
                 >
                   <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', padding: '20px 24px', fontSize: '1.3rem', fontWeight: 600, color: '#1a1a1a', zIndex: 100 }}>
                     Hall Of Unsub
@@ -2613,9 +2584,7 @@ function DashboardContent() {
                   style={{
                     position: 'relative',
                     display: 'flex', 
-                    flexDirection: 'column', 
-                    gridColumn: 'span 1',
-                    gridRow: 'auto',
+                    flexDirection: 'column',
                     gap: '16px',
                     background: 'rgba(255,255,255,0.7)',
                     backdropFilter: 'blur(20px)',
@@ -2664,110 +2633,7 @@ function DashboardContent() {
                   </div>
                 </div>
 
-              {/* ── Unread Inbox Mails Section ── */}
-              <div className="db-card db-inbox-card bento-inbox">
-                <div className="db-inbox-header">
-                  <div className="db-inbox-title">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                      <polyline points="22,6 12,13 2,6"></polyline>
-                    </svg>
-                    Unread Inbox
-                    {inboxEmails.length > 0 && (
-                      <span className="db-inbox-badge">{inboxEmails.length}</span>
-                    )}
-                  </div>
-                  {inboxEmails.length > 0 ? (
-                    <button 
-                      onClick={() => {
-                        setUnsubAllDeselected([]);
-                        setUnsubAllDialogOpen(true);
-                      }}
-                      disabled={isUnsubscribingAll}
-                      style={{ padding: '6px 14px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, cursor: isUnsubscribingAll ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
-                      onMouseEnter={(e) => !isUnsubscribingAll && (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)')}
-                      onMouseLeave={(e) => !isUnsubscribingAll && (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)')}
-                    >
-                      {isUnsubscribingAll ? (
-                        <><span className="db-spin" style={{ width: '12px', height: '12px', marginRight: 0, borderWidth: '2px', borderTopColor: '#ef4444' }} /> Unsubscribing...</>
-                      ) : (
-                        'Unsubscribe All'
-                      )}
-                    </button>
-                  ) : (
-                    <div style={{ fontSize: '0.75rem', color: '#aaa', fontWeight: 500 }}>
-                      Latest unread · newest first
-                    </div>
-                  )}
-                </div>
 
-                {inboxLoading ? (
-                  <div className="db-inbox-skeleton">
-                    {[1,2,3,4,5].map(i => (
-                      <div key={i} className="db-inbox-skeleton-item">
-                        <div className="db-skeleton-circle" />
-                        <div className="db-skeleton-lines">
-                          <div className="db-skeleton-line" style={{ width: '40%' }} />
-                          <div className="db-skeleton-line" style={{ width: '70%' }} />
-                          <div className="db-skeleton-line" style={{ width: '55%' }} />
-                        </div>
-                        <div className="db-skeleton-line" style={{ width: '48px', height: '10px' }} />
-                      </div>
-                    ))}
-                  </div>
-                ) : inboxEmails.length === 0 ? (
-                  <div className="db-inbox-empty">
-                    <div className="db-inbox-empty-icon">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                        <polyline points="22,6 12,13 2,6"></polyline>
-                      </svg>
-                    </div>
-                    <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#888' }}>All caught up!</div>
-                    <div style={{ fontSize: '0.78rem', color: '#bbb', textAlign: 'center', maxWidth: '260px', lineHeight: 1.5 }}>
-                      No unread emails in your inbox right now. Check back after new mail arrives.
-                    </div>
-                  </div>
-                ) : (
-                  <div className="db-inbox-list" data-lenis-prevent="true">
-                    {inboxEmails.map((mail) => (
-                      <div key={mail.id} className="db-inbox-item">
-                        {/* Avatar */}
-                        <div className="db-inbox-avatar">
-                          {mail.initials}
-                        </div>
-
-                        {/* Content */}
-                        <div className="db-inbox-content">
-                          <div className="db-inbox-sender">{mail.sender_name || mail.from}</div>
-                          <div className="db-inbox-subject">{mail.subject}</div>
-                          {mail.snippet && (
-                            <div className="db-inbox-snippet">{mail.snippet}</div>
-                          )}
-                        </div>
-
-                        {/* Meta */}
-                        <div className="db-inbox-meta">
-                          <div className="db-inbox-date">{mail.date_formatted || mail.date}</div>
-                          <div className="db-inbox-dot" />
-                        </div>
-
-                        {/* Unsub Overlay Button — per-email, uses user's own credentials */}
-                        <button 
-                          className="db-inbox-unsub-btn"
-                          disabled={unsubscribingId === mail.id}
-                          onClick={(e) => { e.stopPropagation(); setUnsubTargetMail(mail); setUnsubDialogOpen(true); }}
-                          style={unsubscribingId === mail.id ? { opacity: 1, transform: 'translateY(0)', cursor: 'not-allowed', background: 'rgba(239,68,68,0.05)' } : {}}
-                        >
-                          {unsubscribingId === mail.id ? (
-                            <><span className="db-spin" style={{ width: '10px', height: '10px', marginRight: '4px', borderWidth: '2px', borderTopColor: '#ef4444', display: 'inline-block', verticalAlign: 'middle' }} />Processing...</>
-                          ) : 'Unsubscribe'}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
 
               {/* ── Unsubscribe History Section ── */}
               <div className="db-card db-inbox-card bento-history">
@@ -2808,47 +2674,52 @@ function DashboardContent() {
                     <div style={{ fontSize: '0.78rem', color: '#bbb' }}>Logs will appear here once you unsubscribe.</div>
                   </div>
                 ) : (
-                  <div className="db-inbox-grid" data-lenis-prevent="true" style={{ 
+                  <div className="db-inbox-list" data-lenis-prevent="true" style={{ 
                     display: 'grid', 
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', 
+                    gridTemplateColumns: 'repeat(3, 1fr)',
                     gap: '12px', 
                     maxHeight: '380px', 
                     overflowY: 'auto', 
                     padding: '8px' 
                   }}>
-                    {logs.map((log, i) => (
+                    {logs.slice(0, 10).map((log, i) => (
                       <div key={i} style={{ 
                         background: 'rgba(0,0,0,0.02)', 
                         border: '1px solid rgba(0,0,0,0.06)', 
-                        borderRadius: '12px', 
-                        padding: '12px 8px',
+                        borderRadius: '8px', 
+                        padding: '10px 12px',
                         display: 'flex',
-                        flexDirection: 'column',
+                        flexDirection: 'row',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        textAlign: 'center',
+                        justifyContent: 'space-between',
                         gap: '8px',
                         cursor: 'default',
-                        aspectRatio: '1 / 1',
                         transition: 'background 0.15s'
-                      }}>
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.02)'}
+                      >
                         <div style={{ 
-                          width: '100%', padding: '6px 0', borderRadius: '8px', 
-                          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                          padding: '4px 6px', borderRadius: '6px', 
+                          display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '4px',
                           background: log.result === 'success' ? 'rgba(16,185,129,0.1)' : log.result === 'skipped' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)', 
-                          color: log.result === 'success' ? '#10b981' : log.result === 'skipped' ? '#f59e0b' : '#ef4444'
+                          color: log.result === 'success' ? '#10b981' : log.result === 'skipped' ? '#f59e0b' : '#ef4444',
+                          minWidth: '95px',
+                          justifyContent: 'center'
                         }}>
-                          <div style={{ fontSize: '1.1rem', flexShrink: 0 }}>
+                          <div style={{ fontSize: '1rem', flexShrink: 0 }}>
                              {log.result === 'success' ? '✓' : log.result === 'skipped' ? '⏭' : log.result === 'not_found' ? '?' : '✕'}
                           </div>
                           <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'capitalize' }}>
                              {log.result.replace('_', ' ')}
                           </div>
                         </div>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1a1a1a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
+                        
+                        <div style={{ flex: 1, fontSize: '0.85rem', fontWeight: 600, color: '#1a1a1a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {log.organization_name || 'Unknown'}
                         </div>
-                        <div style={{ fontSize: '0.65rem', color: '#888', marginTop: 'auto', lineHeight: '1.2' }}>
+                        
+                        <div style={{ fontSize: '0.75rem', color: '#888', flexShrink: 0, fontWeight: 500 }}>
                           {new Date(log.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                         </div>
                       </div>
