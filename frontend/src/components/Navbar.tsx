@@ -12,7 +12,7 @@ export default function Navbar() {
   <div className="navbar_logo" style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'white', whiteSpace: 'nowrap', fontFamily: '"Plus Jakarta Sans", sans-serif', letterSpacing: '-0.02em' }} suppressHydrationWarning>UNSUB HERO</div>
 </a>
 <div className="nav_buttons-wrap" suppressHydrationWarning>
-<div animation="hero" className="login-wrap hide-mobile-landscape" suppressHydrationWarning>
+<div animation="hero" className="login-wrap" suppressHydrationWarning>
 <a 
   href="/sign-in" 
   style={{
@@ -35,15 +35,8 @@ export default function Navbar() {
   onMouseEnter={(e) => e.currentTarget.style.background = '#333'}
   onMouseLeave={(e) => e.currentTarget.style.background = '#1a1a1a'}
 >
-  Sign up
+  Dashboard
 </a>
-</div>
-<div className="menu-button w-nav-button" suppressHydrationWarning>
-<div className="nav-button_component" suppressHydrationWarning>
-<div className="nav-button_line is-first" suppressHydrationWarning></div>
-<div className="nav-button_line is-second" suppressHydrationWarning></div>
-<div className="nav-button_line is-third" suppressHydrationWarning></div>
-</div>
 </div>
 </div>
 </div>
