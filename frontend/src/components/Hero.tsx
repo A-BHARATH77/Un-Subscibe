@@ -1,13 +1,30 @@
 // @ts-nocheck
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function Hero() {
   const [copied, setCopied] = useState(false);
+  const [isExiting, setIsExiting] = useState(false);
+  const [isEntering, setIsEntering] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsEntering(false), 50);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handlePersonalClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsExiting(true);
+    setTimeout(() => {
+      router.push('/personal');
+    }, 400);
+  };
 
   return (
     <>
-<section className="section_hero" data-anim="hero" suppressHydrationWarning style={{ height: '100%', position: 'relative', overflow: 'hidden' }}>
+<section className="section_hero" data-anim="hero" suppressHydrationWarning style={{ height: '100%', position: 'relative', overflow: 'hidden', opacity: isEntering ? 0 : (isExiting ? 0 : 1), transform: isEntering ? 'scale(1.02)' : (isExiting ? 'scale(0.98)' : 'scale(1)'), transition: 'opacity 0.4s ease-out, transform 0.4s ease-out' }}>
 
 {/* Video Background */}
 <div style={{ position: 'absolute', inset: 0, zIndex: 1, overflow: 'hidden', pointerEvents: 'none' }}>
@@ -30,19 +47,19 @@ export default function Hero() {
     }}
   />
 </div>
-<div animation="wrap" className="hero_wrap" suppressHydrationWarning style={{ marginTop: '-60px', position: 'relative', zIndex: 10 }}>
+<div animation="wrap" className="hero_wrap" suppressHydrationWarning style={{ marginTop: '-100px', position: 'relative', zIndex: 10 }}>
 <div className="padding-global is-hero" suppressHydrationWarning>
 <div className="vertical-center" suppressHydrationWarning>
 <h1 className="text-align-center" hero-text="" suppressHydrationWarning style={{ textShadow: '0 4px 16px rgba(0, 0, 0, 0.95), 0 0 40px rgba(0, 0, 0, 0.6)' }}>
                   Forward and<br/><span className="opacity-73" suppressHydrationWarning>forget.</span>
 </h1>
-<div className="spacer-medium" suppressHydrationWarning></div>
+<div className="spacer-medium" style={{ height: '1.25rem' }} suppressHydrationWarning></div>
 <div className="max-width-medium" suppressHydrationWarning>
 <div className="text-base text-color-on-primary text-align-center" hero-text="" suppressHydrationWarning style={{ textShadow: '0 2px 8px rgba(0, 0, 0, 0.95), 0 0 30px rgba(0, 0, 0, 0.6)' }}>
-                    You forward an email, and that sender is permanently killed from your inbox. No dashboards to manage, no apps to install, and absolutely no granting third-party OAuth access.
+                    You forward an email, and that sender is permanently killed from your inbox. No signup's , nothing to manage, no apps to install, and absolutely no granting third-party OAuth access.
                   </div>
 </div>
-<div className="spacer-huge" suppressHydrationWarning></div>
+<div className="spacer-huge" style={{ height: '2.5rem' }} suppressHydrationWarning></div>
 <div className="button_wrapper is-hero" style={{ justifyContent: 'center' }} suppressHydrationWarning>
   <button 
     onClick={() => {
@@ -81,6 +98,87 @@ export default function Hero() {
       </svg>
     )}
   </button>
+</div>
+
+{/* Personal / Business Split Cards */}
+<div style={{
+  display: 'flex',
+  gap: '16px',
+  marginTop: '20px',
+  justifyContent: 'center',
+  flexWrap: 'wrap',
+}} suppressHydrationWarning>
+
+  {/* Personal Card */}
+  <a href="/personal" onClick={handlePersonalClick} style={{ textDecoration: 'none' }} suppressHydrationWarning>
+    <div
+      style={{
+        background: 'rgba(15, 23, 42, 0.45)',
+        border: '1px solid rgba(255, 255, 255, 0.12)',
+        borderRadius: '16px',
+        padding: '20px 28px',
+        width: '220px',
+        cursor: 'pointer',
+        transition: 'all 0.25s ease',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '6px',
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLDivElement).style.background = 'rgba(15, 23, 42, 0.7)';
+        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-3px)';
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLDivElement).style.background = 'rgba(15, 23, 42, 0.45)';
+        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
+      }}
+      suppressHydrationWarning
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }} suppressHydrationWarning>
+        <span style={{ color: '#fff', fontFamily: '"Plus Jakarta Sans", sans-serif', fontWeight: '700', fontSize: '1rem', letterSpacing: '-0.01em' }} suppressHydrationWarning>Personal</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+      <span style={{ color: 'rgba(255,255,255,0.75)', fontFamily: '"Plus Jakarta Sans", sans-serif', fontSize: '0.78rem', lineHeight: '1.4', fontWeight: '400' }} suppressHydrationWarning>Declutter your inbox, no login required</span>
+    </div>
+  </a>
+
+  {/* Business Card */}
+  <a href="/business" style={{ textDecoration: 'none' }} suppressHydrationWarning>
+    <div
+      style={{
+        background: 'rgba(15, 23, 42, 0.45)',
+        border: '1px solid rgba(255, 255, 255, 0.12)',
+        borderRadius: '16px',
+        padding: '20px 28px',
+        width: '220px',
+        cursor: 'pointer',
+        transition: 'all 0.25s ease',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '6px',
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLDivElement).style.background = 'rgba(15, 23, 42, 0.7)';
+        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-3px)';
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLDivElement).style.background = 'rgba(15, 23, 42, 0.45)';
+        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
+      }}
+      suppressHydrationWarning
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }} suppressHydrationWarning>
+        <span style={{ color: '#fff', fontFamily: '"Plus Jakarta Sans", sans-serif', fontWeight: '700', fontSize: '1rem', letterSpacing: '-0.01em' }} suppressHydrationWarning>Business</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+      <span style={{ color: 'rgba(255,255,255,0.75)', fontFamily: '"Plus Jakarta Sans", sans-serif', fontSize: '0.78rem', lineHeight: '1.4', fontWeight: '400' }} suppressHydrationWarning>Spare your colleague's inbox</span>
+    </div>
+  </a>
+
 </div>
 </div>
 </div>
