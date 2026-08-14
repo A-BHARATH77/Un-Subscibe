@@ -101,41 +101,11 @@ export default function Hero() {
 </div>
 
 {/* Personal / Business Split Cards */}
-<div style={{
-  display: 'flex',
-  gap: '16px',
-  marginTop: '20px',
-  justifyContent: 'center',
-  flexWrap: 'wrap',
-}} suppressHydrationWarning>
+<div className="hero-cards-container" suppressHydrationWarning>
 
   {/* Personal Card */}
-  <a href="/personal" onClick={handlePersonalClick} style={{ textDecoration: 'none' }} suppressHydrationWarning>
-    <div
-      style={{
-        background: 'rgba(15, 23, 42, 0.45)',
-        border: '1px solid rgba(255, 255, 255, 0.12)',
-        borderRadius: '16px',
-        padding: '20px 28px',
-        width: '220px',
-        cursor: 'pointer',
-        transition: 'all 0.25s ease',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '6px',
-      }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLDivElement).style.background = 'rgba(15, 23, 42, 0.7)';
-        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-3px)';
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLDivElement).style.background = 'rgba(15, 23, 42, 0.45)';
-        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
-      }}
-      suppressHydrationWarning
-    >
+  <a href="/personal" onClick={handlePersonalClick} className="hero-card-link" suppressHydrationWarning>
+    <div className="hero-card" suppressHydrationWarning>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }} suppressHydrationWarning>
         <span style={{ color: '#fff', fontFamily: '"Plus Jakarta Sans", sans-serif', fontWeight: '700', fontSize: '1rem', letterSpacing: '-0.01em' }} suppressHydrationWarning>Personal</span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
@@ -145,32 +115,8 @@ export default function Hero() {
   </a>
 
   {/* Business Card */}
-  <a href="/business" style={{ textDecoration: 'none' }} suppressHydrationWarning>
-    <div
-      style={{
-        background: 'rgba(15, 23, 42, 0.45)',
-        border: '1px solid rgba(255, 255, 255, 0.12)',
-        borderRadius: '16px',
-        padding: '20px 28px',
-        width: '220px',
-        cursor: 'pointer',
-        transition: 'all 0.25s ease',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '6px',
-      }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLDivElement).style.background = 'rgba(15, 23, 42, 0.7)';
-        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-3px)';
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLDivElement).style.background = 'rgba(15, 23, 42, 0.45)';
-        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
-      }}
-      suppressHydrationWarning
-    >
+  <a href="/business" className="hero-card-link" suppressHydrationWarning>
+    <div className="hero-card" suppressHydrationWarning>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }} suppressHydrationWarning>
         <span style={{ color: '#fff', fontFamily: '"Plus Jakarta Sans", sans-serif', fontWeight: '700', fontSize: '1rem', letterSpacing: '-0.01em' }} suppressHydrationWarning>Business</span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
