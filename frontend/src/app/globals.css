@@ -436,6 +436,14 @@ a,
   }
 }
 
-
-
-
+/* Home Page Mobile-only Header Scaling overrides */
+@media screen and (max-width: 479px) {
+  .navbar_logo {
+    font-size: 1.15rem !important;
+  }
+  .dashboard-btn {
+    font-size: 0.8rem !important;
+    padding: 8px 14px !important;
+    min-width: 80px !important;
+  }
+}

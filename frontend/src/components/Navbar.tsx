@@ -15,6 +15,7 @@ export default function Navbar() {
 <div animation="hero" className="login-wrap" suppressHydrationWarning>
 <a 
   href="/sign-in" 
+  className="dashboard-btn"
   style={{
     display: 'inline-flex',
     alignItems: 'center',
