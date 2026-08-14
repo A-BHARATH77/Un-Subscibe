@@ -33,12 +33,12 @@ export default function Hero() {
 <div animation="wrap" className="hero_wrap" suppressHydrationWarning style={{ marginTop: '-60px', position: 'relative', zIndex: 10 }}>
 <div className="padding-global is-hero" suppressHydrationWarning>
 <div className="vertical-center" suppressHydrationWarning>
-<h1 className="text-align-center" hero-text="" suppressHydrationWarning>
+<h1 className="text-align-center" hero-text="" suppressHydrationWarning style={{ textShadow: '0 4px 16px rgba(0, 0, 0, 0.95), 0 0 40px rgba(0, 0, 0, 0.6)' }}>
                   Forward and<br/><span className="opacity-73" suppressHydrationWarning>forget.</span>
 </h1>
 <div className="spacer-medium" suppressHydrationWarning></div>
 <div className="max-width-medium" suppressHydrationWarning>
-<div className="text-base text-color-on-primary text-align-center" hero-text="" suppressHydrationWarning>
+<div className="text-base text-color-on-primary text-align-center" hero-text="" suppressHydrationWarning style={{ textShadow: '0 2px 8px rgba(0, 0, 0, 0.95), 0 0 30px rgba(0, 0, 0, 0.6)' }}>
                     You forward an email, and that sender is permanently killed from your inbox. No dashboards to manage, no apps to install, and absolutely no granting third-party OAuth access.
                   </div>
 </div>
