@@ -312,4 +312,130 @@ a,
   visibility: hidden;
 }
 
+/* Home Page Split Cards Responsive Styling */
+.hero-cards-container {
+  display: flex;
+  gap: 16px;
+  margin-top: 20px;
+  justify-content: center;
+  flex-direction: column; /* stacked on mobile */
+  align-items: center;
+  width: 100%;
+  padding: 0 16px;
+  box-sizing: border-box;
+}
+
+@media (min-width: 640px) {
+  .hero-cards-container {
+    flex-direction: row; /* side-by-side on tablet/desktop */
+    width: auto;
+    padding: 0;
+  }
+}
+
+.hero-card-link {
+  text-decoration: none;
+  width: 100%;
+  max-width: 340px; /* limits width on mobile */
+}
+
+@media (min-width: 640px) {
+  .hero-card-link {
+    width: auto;
+    max-width: none;
+  }
+}
+
+.hero-card {
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 20px 28px;
+  width: 100%; /* full width on mobile within the link constraint */
+  height: 120px; /* fixed height for cards to ensure uniform layout */
+  cursor: pointer;
+  transition: all 0.25s ease;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+}
+
+.hero-card:hover {
+  background: rgba(15, 23, 42, 0.7) !important;
+  transform: translateY(-3px);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+@media (min-width: 640px) {
+  .hero-card {
+    width: 220px; /* fixed width on screens other than mobile */
+    height: 130px;
+  }
+}
+
+/* Mobile-only Responsiveness Styles */
+@media screen and (max-width: 767px) {
+  .section_hero {
+    height: auto !important;
+    min-height: 100vh;
+    padding-bottom: 80px; /* ensures breathing room at bottom */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .hero_wrap {
+    margin-top: 0px !important;
+    padding-top: 60px !important; /* spacing below navigation bar */
+    padding-bottom: 20px !important;
+  }
+
+  /* Make main title scale gracefully */
+  .section_hero h1 {
+    font-size: 2.5rem !important;
+    line-height: 1.15 !important;
+    margin: 0 auto;
+    max-width: 90%;
+  }
+
+  /* Make description text scale and fit */
+  .section_hero .text-base {
+    font-size: 0.9rem !important;
+    line-height: 1.5 !important;
+    padding: 0 16px !important;
+    max-width: 100% !important;
+  }
+
+  /* Reduce spacers for compact layout */
+  .section_hero .spacer-huge {
+    height: 1.5rem !important;
+  }
+
+  .section_hero .spacer-medium {
+    height: 0.75rem !important;
+  }
+
+  /* Adjust Unsubscribe button text size if needed */
+  .button_wrapper.is-hero button {
+    font-size: 0.85rem !important;
+    padding: 8px 14px !important;
+  }
+}
+
+@media screen and (max-width: 380px) {
+  /* Adjust for extremely small viewports */
+  .section_hero h1 {
+    font-size: 2.1rem !important;
+  }
+  .section_hero .text-base {
+    font-size: 0.85rem !important;
+  }
+}
+
+
+
 
