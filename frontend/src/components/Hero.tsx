@@ -56,7 +56,7 @@ export default function Hero() {
 <div className="spacer-medium" style={{ height: '1.25rem' }} suppressHydrationWarning></div>
 <div className="max-width-medium" suppressHydrationWarning>
 <div className="text-base text-color-on-primary text-align-center" hero-text="" suppressHydrationWarning style={{ textShadow: '0 2px 8px rgba(0, 0, 0, 0.95), 0 0 30px rgba(0, 0, 0, 0.6)' }}>
-                    You forward an email, and that sender is permanently killed from your inbox. No signup's , nothing to manage, no apps to install, and absolutely no granting third-party OAuth access.
+                    Forward your first email to <strong>unsubscribe@unsubhero.com</strong> — and forget it. No logins. No plugins.
                   </div>
 </div>
 <div className="spacer-huge" style={{ height: '2.5rem' }} suppressHydrationWarning></div>
