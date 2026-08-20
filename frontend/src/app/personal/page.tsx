@@ -356,6 +356,54 @@ export default function PersonalPage() {
           font-size: 0.78rem; color: #2e5574; line-height: 1.5;
         }
 
+        /* ── Gmail Screenshot ── */
+        .pn-screenshot-wrap {
+          margin-bottom: 48px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 14px;
+        }
+        .pn-screenshot-label {
+          font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em;
+          text-transform: uppercase; color: #2e5574;
+        }
+        .pn-screenshot-frame {
+          position: relative;
+          max-width: 560px;
+          width: 100%;
+          border-radius: 16px;
+          overflow: hidden;
+          box-shadow:
+            0 2px 0 rgba(255,255,255,0.6) inset,
+            0 24px 60px rgba(0,0,0,0.22),
+            0 4px 16px rgba(0,0,0,0.12);
+          border: 1px solid rgba(255,255,255,0.55);
+          background: #fff;
+        }
+        .pn-screenshot-frame img {
+          display: block;
+          width: 100%;
+          height: auto;
+          border-radius: 15px;
+        }
+        .pn-screenshot-badge {
+          position: absolute;
+          bottom: 12px;
+          right: 12px;
+          background: rgba(15,23,42,0.82);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          border: 1px solid rgba(255,255,255,0.12);
+          border-radius: 8px;
+          padding: 6px 12px;
+          font-size: 0.72rem;
+          font-weight: 700;
+          color: #fff;
+          letter-spacing: -0.01em;
+          pointer-events: none;
+        }
+
         /* ── CTA ── */
         .pn-cta {
           background: rgba(15, 23, 42, 0.85);
@@ -543,6 +591,18 @@ export default function PersonalPage() {
                   <span className="pn-benefit-sub">{b.sub}</span>
                 </div>
               ))}
+            </div>
+
+            {/* Gmail Screenshot */}
+            <div className="pn-screenshot-wrap">
+              <span className="pn-screenshot-label">just hit forward</span>
+              <div className="pn-screenshot-frame">
+                <img
+                  src="/gmail-forward-mockup.png"
+                  alt="Gmail compose window showing a forwarded email addressed to unsubscribe@unsubhero.com"
+                  draggable={false}
+                />
+              </div>
             </div>
 
             {/* CTA */}
