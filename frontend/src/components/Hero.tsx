@@ -22,6 +22,14 @@ export default function Hero() {
     }, 400);
   };
 
+  const handleBusinessClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsExiting(true);
+    setTimeout(() => {
+      router.push('/business');
+    }, 400);
+  };
+
   return (
     <>
 <section className="section_hero" data-anim="hero" suppressHydrationWarning style={{ height: '100%', position: 'relative', overflow: 'hidden', opacity: isEntering ? 0 : (isExiting ? 0 : 1), transform: isEntering ? 'scale(1.02)' : (isExiting ? 'scale(0.98)' : 'scale(1)'), transition: 'opacity 0.4s ease-out, transform 0.4s ease-out' }}>
@@ -115,7 +123,7 @@ export default function Hero() {
   </a>
 
   {/* Business Card */}
-  <a href="/business" className="hero-card-link" suppressHydrationWarning>
+  <a href="/business" onClick={handleBusinessClick} className="hero-card-link" suppressHydrationWarning>
     <div className="hero-card" suppressHydrationWarning>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }} suppressHydrationWarning>
         <span style={{ color: '#fff', fontFamily: '"Plus Jakarta Sans", sans-serif', fontWeight: '700', fontSize: '1rem', letterSpacing: '-0.01em' }} suppressHydrationWarning>Business</span>
