@@ -57,23 +57,37 @@ export default function RootLayout({
       </head>
       <body className="bg-primary" suppressHydrationWarning>
         {children}
+
+        {/* Fonts — global, safe on every route */}
         <Script src="https://ajax.googleapis.com/ajax/libs/webfont/1.6.26/webfont.js" strategy="beforeInteractive" />
         <Script id="webfont-init" strategy="beforeInteractive">{`WebFont.load({ google: { families: ["Inter:300,400,500,600,700", "Plus Jakarta Sans:300,400,500,600,700"] } });`}</Script>
-        
-        {/* GSAP from head */}
+
+        {/*
+          GSAP, Swiper, and jQuery are safe to load globally — they have zero
+          URL-aware routing logic and will NOT cause a 404 on /business or /personal.
+
+          The Webflow runtime chunks (webflow.schunk.*) are intentionally excluded here
+          and loaded only on the home page (src/app/page.tsx) because Webflow's router
+          looks up CDN assets by the current URL slug, and /business doesn't exist in
+          the original Webflow site — causing a 404 that breaks the page render.
+
+          beforeInteractive is ONLY valid inside root layouts (Next.js restriction).
+        */}
+
+        {/* GSAP suite (from jsDelivr) */}
         <Script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" strategy="beforeInteractive" />
         <Script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/ScrollTrigger.min.js" strategy="beforeInteractive" />
         <Script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/Draggable.min.js" strategy="beforeInteractive" />
         <Script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/InertiaPlugin.min.js" strategy="beforeInteractive" />
         <Script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/Observer.min.js" strategy="beforeInteractive" />
+
+        {/* Swiper */}
         <Script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js" strategy="beforeInteractive" />
-        
-        {/* Scripts from bottom of body */}
+
+        {/* jQuery (Webflow dependency — safe globally, no routing logic) */}
         <Script src="https://d3e54v103j8qbb.cloudfront.net/js/jquery-3.5.1.min.dc5e7f18c8.js?site=6929c116366a14507fc8424d" strategy="beforeInteractive" crossOrigin="anonymous" />
-        <Script src="https://cdn.prod.website-files.com/6929c116366a14507fc8424d/js/webflow.schunk.36b8fb49256177c8.js" strategy="lazyOnload" crossOrigin="anonymous" />
-        <Script src="https://cdn.prod.website-files.com/6929c116366a14507fc8424d/js/webflow.schunk.7fa942c6f9da5827.js" strategy="lazyOnload" crossOrigin="anonymous" />
-        <Script src="https://cdn.prod.website-files.com/6929c116366a14507fc8424d/js/webflow.schunk.4ed80055bdae3496.js" strategy="lazyOnload" crossOrigin="anonymous" />
-        <Script src="https://cdn.prod.website-files.com/6929c116366a14507fc8424d/js/webflow.ec325c54.28244e4c1d8bb63f.js" strategy="lazyOnload" crossOrigin="anonymous" />
+
+        {/* Webflow-bundled GSAP extras (includes SplitText, ScrollTrigger v3) */}
         <Script src="https://cdn.prod.website-files.com/gsap/3.15.0/gsap.min.js" strategy="beforeInteractive" />
         <Script src="https://cdn.prod.website-files.com/gsap/3.15.0/ScrollTrigger.min.js" strategy="beforeInteractive" />
         <Script src="https://cdn.prod.website-files.com/gsap/3.15.0/SplitText.min.js" strategy="beforeInteractive" />
