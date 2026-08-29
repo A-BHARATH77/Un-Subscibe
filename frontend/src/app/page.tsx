@@ -1,17 +1,39 @@
+"use client";
+
+import { useState } from "react";
 import Navbar from '@/components/Navbar';
 import Hero from '@/components/Hero';
 import TemplateOverlay from '@/components/TemplateOverlay';
+import Loader from '@/components/Loader';
 import Script from 'next/script';
 
 export default function Home() {
+  const [showHome, setShowHome] = useState(false);
+
   return (
     <>
-      <style dangerouslySetInnerHTML={{__html: `
-        body, html { overflow: hidden !important; margin: 0 !important; padding: 0 !important; background: white !important; height: 100% !important; }
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        body, html { overflow: hidden !important; margin: 0 !important; padding: 0 !important; background: #ffffff !important; height: 100% !important; }
       `}} />
+
+      <Loader onComplete={() => setShowHome(true)} />
+
       <div
         className="page-wrapper"
-        style={{ position: 'absolute', top: '6px', bottom: '6px', left: '6px', right: '6px', overflow: 'hidden', borderRadius: '20px', margin: 0 }}
+        style={{
+          position: 'absolute',
+          top: '6px',
+          bottom: '15px',
+          left: '6px',
+          right: '6px',
+          overflow: 'hidden',
+          borderRadius: '6px',
+          margin: 0,
+          opacity: showHome ? 1 : 0,
+          visibility: showHome ? 'visible' : 'hidden',
+          transition: 'opacity 0.6s cubic-bezier(0.25, 1, 0.5, 1)'
+        }}
       >
         <Navbar />
         <main className="main-wrapper">
